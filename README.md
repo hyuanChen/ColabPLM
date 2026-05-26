@@ -50,7 +50,7 @@ slice in < 2 min wall-clock.
 Push this directory to GitHub, then open:
 
 ```
-https://colab.research.google.com/github/<USER>/<REPO>/blob/main/notebooks/ColabPLM.ipynb
+https://colab.research.google.com/github/hyuanChen/ColabPLM/blob/main/notebooks/ColabPLM.ipynb
 ```
 
 The notebook inlines `colab_plm/*.py`, so it works on a clean Colab runtime
