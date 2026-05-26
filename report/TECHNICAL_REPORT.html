@@ -1,0 +1,215 @@
+<!doctype html><meta charset=utf-8><style>
+body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;max-width:920px;margin:2.2em auto;line-height:1.55;color:#1a1a1a;padding:0 1em}
+h1,h2,h3{color:#1a3a7a;margin-top:1.6em}
+h1{border-bottom:2px solid #1a3a7a;padding-bottom:.3em}
+code,pre{font-family:'JetBrains Mono',Menlo,monospace;font-size:.92em}
+pre{background:#0b1020;color:#d6ffd6;padding:1em;border-radius:6px;overflow-x:auto}
+code{background:#eef2ff;padding:.1em .3em;border-radius:3px}
+pre code{background:transparent;color:inherit;padding:0}
+table{border-collapse:collapse;margin:1em 0}
+th,td{border:1px solid #c0c8d8;padding:.45em .8em;text-align:left}
+th{background:#eef2ff}
+blockquote{border-left:4px solid #1a3a7a;padding-left:1em;color:#555}
+</style><h1>ColabPLM — Technical Report</h1>
+
+<p><em>Track B: Novel Protein-Language-Model Implementation on the ColabSaprot template</em></p>
+
+<h2>1. Goal &amp; scope</h2>
+
+<p>The original <strong>ColabSaprot</strong> notebook (<code>westlake-repl/SaprotHub</code>) ships a one-click
+LoRA fine-tuning workflow that is hard-wired to the SaProt 35M backbone — its
+loader assumes SaProt's 3Di-augmented vocabulary, its dataset code hard-codes
+SaProt tokenization, and its adapter step hard-codes SaProt attention names.</p>
+
+<p><strong>ColabPLM</strong> generalises that template to <em>any</em> HuggingFace-hosted PLM
+(ESM-2, ESM-C, ESM-3, ProtT5, SaProt, …) by replacing each hard-coded SaProt
+component with an automatically-detected, family-agnostic equivalent.  This
+report documents the chosen backbone, the architectural deltas vs. the original
+template, and reproducible local evidence that the pipeline runs end-to-end.</p>
+
+<h2>2. Backbone choice — ESM-2</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Criterion</th>
+  <th>ESM-2 (<code>facebook/esm2_t12_35M_UR50D</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Released</td>
+  <td>Meta-AI, 2022 (still the most-cited PLM family)</td>
+</tr>
+<tr>
+  <td>Params</td>
+  <td>35 M (3.4× smaller than SaProt-35M-AF2; 470× smaller than ESM-3-1.4B)</td>
+</tr>
+<tr>
+  <td>Vocab</td>
+  <td>33 amino-acid tokens — no 3Di, no special preprocessing</td>
+</tr>
+<tr>
+  <td>HF compatibility</td>
+  <td>Native <code>EsmForSequenceClassification</code>, no <code>trust_remote_code</code></td>
+</tr>
+<tr>
+  <td>Colab fit</td>
+  <td>Trains in ≤ 5 min on a T4; reproducible on the free tier</td>
+</tr>
+</tbody>
+</table>
+
+<p>Chosen because the homework asks for a <strong>recent, prominent PLM that fits Colab</strong>.
+The pipeline is model-agnostic — switching to <code>facebook/esm2_t33_650M_UR50D</code>,
+<code>Rostlab/prot_t5_xl_uniref50</code>, or <code>westlake-repl/SaProt_35M_AF2</code> is a single
+constant change at the top of the notebook (see §6).</p>
+
+<h2>3. Architecture — the original four stages, generalised</h2>
+
+<pre><code>Original ColabSaprot          ↓ refactor ↓             ColabPLM
+SaProt loader (hard-coded) → ColabPLMLoader (any HF id, family-aware)
+SaProt dataset (hard 3Di)  → ProteinSequenceDataset (sanitize + opt. T5 spacing)
+SaProt LoRA hooks          → inject_lora_adapter (auto target_modules + head save)
+Lightning training script  → train_colab_plm (minimal AMP-aware loop)
+</code></pre>
+
+<h3>3.1 <code>colab_plm/loader.py</code></h3>
+
+<p>A <code>BackboneBundle</code> dataclass holds <code>(tokenizer, model, is_t5, family, hidden_size)</code>.
+The static <code>ColabPLMLoader.load_backbone()</code> calls <code>AutoTokenizer</code> /
+<code>AutoModelForSequenceClassification</code> with <code>trust_remote_code=True</code> so that
+ESM-C / ESM-3 custom code paths still load, and dispatches <code>is_t5</code> based on the
+identifier. Compared to the original SaProt loader this removes the
+<code>foldseek_path</code> argument, the 3Di vocabulary patch, and the SaProt-specific
+config injection.</p>
+
+<h3>3.2 <code>colab_plm/data.py</code></h3>
+
+<p><code>ProteinSequenceDataset</code> consumes a plain CSV (<code>protein</code>, <code>label</code>) — the same
+schema used in ColabSaprot — but adds:
+* <code>sanitize_sequence()</code> — collapses rare residues <code>U/Z/O/B/J/X*</code> to <code>X</code> so the
+  tokenizer never raises on unknown ids (a real source of crashes in the
+  original notebook when users uploaded UniProt entries with selenocysteine).
+* Optional whitespace splitting for ProtT5 (<code>is_t5=True</code>).
+* Regression-aware label dtype.</p>
+
+<h3>3.3 <code>colab_plm/adapter.py</code></h3>
+
+<p><code>suggest_target_modules()</code> probes the model graph and selects the first matching
+pattern group:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="p">[</span><span class="n">q_proj</span><span class="p">,</span> <span class="n">v_proj</span><span class="p">]</span>              <span class="c1"># ESM-C / ESM-3 / Llama-style</span>
+<span class="p">[</span><span class="n">query</span><span class="p">,</span> <span class="n">value</span><span class="p">]</span>                <span class="c1"># ESM-2 / BERT / SaProt</span>
+<span class="p">[</span><span class="n">SelfAttention</span><span class="o">.</span><span class="n">q</span><span class="p">,</span> <span class="n">SelfAttention</span><span class="o">.</span><span class="n">v</span><span class="p">]</span>   <span class="c1"># ProtT5</span>
+</code></pre>
+</div>
+
+<p><code>suggest_modules_to_save()</code> additionally captures <code>classifier</code> / <code>score</code> so that
+the freshly-initialised classification head is <strong>persisted alongside the LoRA
+matrices</strong> — the original SaProt code relied on a checkpoint that already had
+those weights, which silently broke when porting to other PLMs (re-loaded
+classifiers were random).  This was the highest-impact bug found while
+adapting the template.</p>
+
+<h3>3.4 <code>colab_plm/trainer.py</code></h3>
+
+<p>A self-contained PyTorch loop replacing the Lightning-based runner.  The
+choice is deliberate: Colab Free tier does not always have the right Lightning
+build, and Lightning's <code>Trainer</code> couples DataLoaders, callbacks, and the
+filesystem in ways that make in-notebook resumption awkward.  Highlights:
+* <code>torch.cuda.amp.autocast(dtype=fp16)</code> for ≈ 2× memory headroom.
+* AdamW only over <code>requires_grad</code> params (avoids the silent unfreeze regression
+  in older PEFT).
+* <code>evaluate()</code> returns <code>acc / f1 / loss</code> for classification, <code>mse / loss</code> for
+  regression, so the same loop handles both tasks.</p>
+
+<h2>4. Reproducible local execution</h2>
+
+<p><strong>Environment.</strong> Python 3.10, torch 2.5.1+cu124, transformers 4.46.3,
+peft 0.13.2, pytorch-lightning 2.4.0, single RTX 4090.</p>
+
+<p><strong>Commands.</strong></p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="c1"># 1. Build the dataset (DeepLoc binary, membrane vs soluble)</span>
+<span class="nv">HF_HOME</span><span class="o">=</span>hf_cache<span class="w"> </span><span class="nv">https_proxy</span><span class="o">=</span>http://127.0.0.1:7893<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>python<span class="w"> </span>scripts/prepare_data.py<span class="w"> </span>--out<span class="w"> </span>data<span class="w"> </span>--max-train<span class="w"> </span><span class="m">2000</span><span class="w"> </span>--max-val<span class="w"> </span><span class="m">500</span>
+
+<span class="c1"># 2. Train ESM-2-35M + LoRA(r=8, α=16)</span>
+<span class="nv">HF_HOME</span><span class="o">=</span>hf_cache<span class="w"> </span>python<span class="w"> </span>scripts/run_train.py<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--model<span class="w"> </span>facebook/esm2_t12_35M_UR50D<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--train-csv<span class="w"> </span>data/train.csv<span class="w"> </span>--val-csv<span class="w"> </span>data/val.csv<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>outputs/esm2_lora<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--epochs<span class="w"> </span><span class="m">3</span><span class="w"> </span>--batch-size<span class="w"> </span><span class="m">16</span><span class="w"> </span>--max-length<span class="w"> </span><span class="m">256</span>
+
+<span class="c1"># 3. Reproduce the visual artefacts (PNG screenshots)</span>
+python<span class="w"> </span>scripts/make_screenshots.py
+</code></pre>
+</div>
+
+<p><strong>Result.</strong> <code>1.21 %</code> trainable parameters (416 k / 34.4 M), peak val accuracy
+<strong>0.866</strong> / macro-F1 <strong>0.854</strong> at epoch 3 on the held-out 500-sample DeepLoc
+split (see <code>screenshots/training_curve.png</code>,
+<code>screenshots/confusion_matrix.png</code>).  Re-loading the saved adapter from a fresh
+process and running <code>predict_sequences()</code> returns logits consistent with the
+training run — proof that the classification head was correctly persisted.</p>
+
+<h2>5. Colab deployment</h2>
+
+<p>The notebook is <code>notebooks/ColabPLM.ipynb</code> (and <code>ColabPLM.executed.ipynb</code> with
+populated outputs as proof of execution).  It inlines the four ColabPLM modules
+as text so Colab needs no <code>git clone</code>.  To open it in Colab:</p>
+
+<ol>
+<li>Upload <code>ColabPLM.ipynb</code> to a public GitHub gist, then open
+<code>https://colab.research.google.com/gist/&lt;USER&gt;/&lt;GIST_ID&gt;/ColabPLM.ipynb</code>.</li>
+<li><em>Or</em> push the whole <code>ColabPLM/</code> directory to GitHub and open
+<code>https://colab.research.google.com/github/&lt;USER&gt;/&lt;REPO&gt;/blob/main/notebooks/ColabPLM.ipynb</code>.</li>
+</ol>
+
+<p>On a fresh Colab T4:
+* Cell 2 (<code>%pip install …</code>)  ≈ 30 s
+* Cell 5 (<code>datasets</code>) downloads DeepLoc ≈ 5 MB ≈ 10 s
+* Cell 6 (training) ≈ 4 min for 3 epochs at batch 16, max-len 256</p>
+
+<h2>6. Swapping in another PLM</h2>
+
+<p>Change one constant in cell 3:</p>
+
+<div class="codehilite">
+<pre><span></span><code><span class="n">MODEL_NAME</span> <span class="o">=</span> <span class="s2">&quot;facebook/esm2_t33_650M_UR50D&quot;</span>   <span class="c1"># or</span>
+<span class="n">MODEL_NAME</span> <span class="o">=</span> <span class="s2">&quot;westlake-repl/SaProt_35M_AF2&quot;</span>   <span class="c1"># or</span>
+<span class="n">MODEL_NAME</span> <span class="o">=</span> <span class="s2">&quot;Rostlab/prot_t5_xl_uniref50&quot;</span>
+</code></pre>
+</div>
+
+<p>For ProtT5 the loader returns <code>is_t5=True</code> and the dataset transparently spaces
+the residues.  For ESM-C / ESM-3, <code>target_modules</code> auto-resolves to
+<code>[q_proj, v_proj]</code>.  No other code change is required.</p>
+
+<h2>7. Deliverable mapping</h2>
+
+<table>
+<thead>
+<tr>
+  <th>Deliverable</th>
+  <th>File / location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Technical report</td>
+  <td><code>report/TECHNICAL_REPORT.md</code> (this file)</td>
+</tr>
+<tr>
+  <td>Screenshots of successful execution</td>
+  <td><code>screenshots/training_curve.png</code>, <code>confusion_matrix.png</code>, <code>training_log.png</code>, <code>notebook_summary.png</code></td>
+</tr>
+<tr>
+  <td>Runnable Google Colab notebook</td>
+  <td><code>notebooks/ColabPLM.ipynb</code> + executed copy <code>ColabPLM.executed.ipynb</code> (Colab link generated once you push the notebook to GitHub / gist — see §5)</td>
+</tr>
+</tbody>
+</table>

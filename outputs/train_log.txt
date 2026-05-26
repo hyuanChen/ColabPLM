@@ -1,0 +1,97 @@
+Some weights of EsmForSequenceClassification were not initialized from the model checkpoint at facebook/esm2_t12_35M_UR50D and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+/home/hongyuan/pretrained/homework/pretain/ColabPLM/colab_plm/trainer.py:87: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler(enabled=fp16 and device.type == "cuda")
+[ColabPLM] device=cuda
+[ColabPLM] family=esm2 hidden_size=480
+trainable params: 416,162 || all params: 34,410,005 || trainable%: 1.2094
+/home/hongyuan/pretrained/homework/pretain/ColabPLM/colab_plm/trainer.py:96: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(
+  epoch 1 step 5/125 loss=0.7466
+  epoch 1 step 10/125 loss=0.7174
+  epoch 1 step 15/125 loss=0.6259
+  epoch 1 step 20/125 loss=0.8137
+  epoch 1 step 25/125 loss=0.6959
+  epoch 1 step 30/125 loss=0.5677
+  epoch 1 step 35/125 loss=0.6343
+  epoch 1 step 40/125 loss=0.4695
+  epoch 1 step 45/125 loss=0.4995
+  epoch 1 step 50/125 loss=0.4820
+  epoch 1 step 55/125 loss=0.6301
+  epoch 1 step 60/125 loss=0.3737
+  epoch 1 step 65/125 loss=0.4930
+  epoch 1 step 70/125 loss=0.3481
+  epoch 1 step 75/125 loss=0.3693
+  epoch 1 step 80/125 loss=0.3561
+  epoch 1 step 85/125 loss=0.5020
+  epoch 1 step 90/125 loss=0.4685
+  epoch 1 step 95/125 loss=0.2625
+  epoch 1 step 100/125 loss=0.4119
+  epoch 1 step 105/125 loss=0.2796
+  epoch 1 step 110/125 loss=0.5967
+  epoch 1 step 115/125 loss=0.4207
+  epoch 1 step 120/125 loss=0.5500
+  epoch 1 step 125/125 loss=0.4292
+[ColabPLM] epoch 1/3 train_loss=0.4974 | val=acc=0.8600, f1=0.8523, loss=0.3535
+/home/hongyuan/pretrained/homework/pretain/ColabPLM/colab_plm/trainer.py:96: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(
+  epoch 2 step 5/125 loss=0.3655
+  epoch 2 step 10/125 loss=0.4268
+  epoch 2 step 15/125 loss=0.6448
+  epoch 2 step 20/125 loss=0.1668
+  epoch 2 step 25/125 loss=0.1775
+  epoch 2 step 30/125 loss=0.2970
+  epoch 2 step 35/125 loss=0.2440
+  epoch 2 step 40/125 loss=0.4679
+  epoch 2 step 45/125 loss=0.4559
+  epoch 2 step 50/125 loss=0.2387
+  epoch 2 step 55/125 loss=0.7411
+  epoch 2 step 60/125 loss=0.3455
+  epoch 2 step 65/125 loss=0.2380
+  epoch 2 step 70/125 loss=0.2446
+  epoch 2 step 75/125 loss=0.5503
+  epoch 2 step 80/125 loss=0.2943
+  epoch 2 step 85/125 loss=0.6419
+  epoch 2 step 90/125 loss=0.1952
+  epoch 2 step 95/125 loss=0.3198
+  epoch 2 step 100/125 loss=0.3400
+  epoch 2 step 105/125 loss=0.3218
+  epoch 2 step 110/125 loss=0.5168
+  epoch 2 step 115/125 loss=0.3122
+  epoch 2 step 120/125 loss=0.2877
+  epoch 2 step 125/125 loss=0.2442
+[ColabPLM] epoch 2/3 train_loss=0.3504 | val=acc=0.8680, f1=0.8575, loss=0.3312
+/home/hongyuan/pretrained/homework/pretain/ColabPLM/colab_plm/trainer.py:96: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(
+  epoch 3 step 5/125 loss=0.4378
+  epoch 3 step 10/125 loss=0.3249
+  epoch 3 step 15/125 loss=0.2059
+  epoch 3 step 20/125 loss=0.5416
+  epoch 3 step 25/125 loss=0.1367
+  epoch 3 step 30/125 loss=0.1677
+  epoch 3 step 35/125 loss=0.2699
+  epoch 3 step 40/125 loss=0.3139
+  epoch 3 step 45/125 loss=0.1290
+  epoch 3 step 50/125 loss=0.1862
+  epoch 3 step 55/125 loss=0.2673
+  epoch 3 step 60/125 loss=0.5110
+  epoch 3 step 65/125 loss=0.3222
+  epoch 3 step 70/125 loss=0.2190
+  epoch 3 step 75/125 loss=0.5941
+  epoch 3 step 80/125 loss=0.2218
+  epoch 3 step 85/125 loss=0.2599
+  epoch 3 step 90/125 loss=0.2874
+  epoch 3 step 95/125 loss=0.4586
+  epoch 3 step 100/125 loss=0.2332
+  epoch 3 step 105/125 loss=0.1359
+  epoch 3 step 110/125 loss=0.3073
+  epoch 3 step 115/125 loss=0.1031
+  epoch 3 step 120/125 loss=0.2045
+  epoch 3 step 125/125 loss=0.2842
+/home/hongyuan/miniconda3/envs/pretrain/lib/python3.10/site-packages/peft/utils/save_and_load.py:243: UserWarning: Could not find a config file in facebook/esm2_t12_35M_UR50D - will assume that the vocabulary was not modified.
+  warnings.warn(
+[ColabPLM] epoch 3/3 train_loss=0.2883 | val=acc=0.8660, f1=0.8544, loss=0.3769
+[ColabPLM] adapter saved to outputs/esm2_lora
+[demo] logits:
+tensor([[ 3.7797, -3.6512],
+        [ 1.0243, -0.8885]])
